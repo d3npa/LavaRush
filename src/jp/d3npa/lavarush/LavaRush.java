@@ -20,11 +20,14 @@ public class LavaRush extends LavaAbility implements AddonAbility {
             "A wave of lava will erupt from the ground, swallowing up anything in its way.";
 
     static ArrayList<LavaRush> instances = new ArrayList<>();
+    static long cooldown = 6000;
 
     private BendingPlayer bendingPlayer;
     private Location origin;
     private Vector direction;
-
+    private int spam = 0;
+    private int interval = 1000;
+    private long lastProgress;
 
     public static void createConfig() {
         FileConfiguration languageConfig = ConfigManager.languageConfig.get();
@@ -44,12 +47,37 @@ public class LavaRush extends LavaAbility implements AddonAbility {
 
     public LavaRush(Player player) {
         super(player);
+
+        this.bendingPlayer = BendingPlayer.getBendingPlayer(player);
+        this.origin = player.getLocation();
+        this.direction = player
+                .getEyeLocation()
+                .getDirection()
+                .setY(0)
+                .normalize();
+
+//        LavaRush.instances.add(this);
+        bendingPlayer.addCooldown(NAME, cooldown);
+        this.lastProgress = System.currentTimeMillis();
         player.sendMessage("New LavaRush Instance");
+        this.start();
     }
 
     @Override
     public void progress() {
+        long currentTime = System.currentTimeMillis();
+        long timeSinceLastProgress = currentTime - lastProgress;
 
+        if (timeSinceLastProgress > interval) {
+            lastProgress = currentTime;
+            this.spam += 1;
+            this.bendingPlayer.getPlayer().sendMessage("Spam");
+
+            if (spam >= 3) {
+                this.bendingPlayer.getPlayer().sendMessage("Removing LavaRush");
+                this.remove();
+            }
+        }
     }
 
     @Override
