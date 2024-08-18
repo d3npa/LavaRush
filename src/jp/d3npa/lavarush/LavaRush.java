@@ -1,6 +1,7 @@
 package jp.d3npa.lavarush;
 
 import com.projectkorra.projectkorra.BendingPlayer;
+import com.projectkorra.projectkorra.GeneralMethods;
 import com.projectkorra.projectkorra.ProjectKorra;
 import com.projectkorra.projectkorra.ability.AddonAbility;
 import com.projectkorra.projectkorra.ability.LavaAbility;
@@ -8,6 +9,8 @@ import com.projectkorra.projectkorra.configuration.ConfigManager;
 import com.projectkorra.projectkorra.util.TempBlock;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.util.Vector;
@@ -34,7 +37,7 @@ public class LavaRush extends LavaAbility implements AddonAbility {
     private LRState state;
 
     /* Blocks are added in groups with their neighbors. Blocks within a group are animated at the same time. */
-    private ArrayList<ArrayList<Location>> wave = new ArrayList<>();
+    private ArrayList<ArrayList<Block>> wave = new ArrayList<>();
     private int depth;
 
     public static void createConfig() {
@@ -90,9 +93,9 @@ public class LavaRush extends LavaAbility implements AddonAbility {
             /* LavaRush has 3 phases: casting, resting, cleanup. */
             switch (state) {
                 case ANIMATING -> {
-                    ArrayList<Location> currentLayer = wave.get(depth++);
-                    for (Location loc : currentLayer) {
-                        TempBlock tempBlock = new TempBlock(loc.getBlock(), Material.MAGMA_BLOCK);
+                    ArrayList<Block> currentLayer = wave.get(depth++);
+                    for (Block block : currentLayer) {
+                        TempBlock tempBlock = new TempBlock(block, Material.MAGMA_BLOCK);
                     }
 
                     if (depth == wave.size()) {
@@ -107,9 +110,9 @@ public class LavaRush extends LavaAbility implements AddonAbility {
                     }
                 }
                 case CLEANUP -> {
-                    ArrayList<Location> currentLayer = wave.get(depth++);
-                    for (Location loc : currentLayer) {
-                        TempBlock tempBlock = TempBlock.get(loc.getBlock());
+                    ArrayList<Block> currentLayer = wave.get(depth++);
+                    for (Block block : currentLayer) {
+                        TempBlock tempBlock = TempBlock.get(block);
                         tempBlock.revertBlock();
                     }
 
@@ -181,8 +184,30 @@ public class LavaRush extends LavaAbility implements AddonAbility {
 
             Vector modifiedDirection = direction.clone().multiply(i);
             Location middle = origin.clone().add(modifiedDirection);
-            ArrayList<Location> layer = new ArrayList<>();
-            layer.add(middle);
+
+            Block block = middle.getBlock();
+            /* some checks must be made on the block before adding
+             *  - is there space above?
+             *  - if it is air, is there earth below it? (slight slope)
+             *  - is it earthbendable?
+             */
+            if (GeneralMethods.isTransparent(block)) {
+                /* when air or water, torch etc, use the block beneath and perform more checks */
+                block = block.getRelative(BlockFace.DOWN);
+            }
+
+            Block above = block.getRelative(BlockFace.UP);
+            if (!GeneralMethods.isTransparent(above)) {
+                // dont worry about going up slopes for now.
+                break;
+            }
+
+            if (!isEarthbendable(block)) {
+                break;
+            }
+
+            ArrayList<Block> layer = new ArrayList<>();
+            layer.add(block);
             wave.add(layer);
         }
 
