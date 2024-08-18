@@ -42,6 +42,7 @@ public class LavaRush extends LavaAbility implements AddonAbility {
     private int depth;
 
     private BlockIterator line;
+    private ArrayList<TempBlock> previousWaveHead = new ArrayList<>();
 
     public static void createConfig() {
         FileConfiguration languageConfig = ConfigManager.languageConfig.get();
@@ -97,8 +98,18 @@ public class LavaRush extends LavaAbility implements AddonAbility {
             switch (state) {
                 case ANIMATING -> {
                     ArrayList<Block> currentLayer = wave.get(depth++);
+
+                    // replace previous wave "head" with air
+                    while (!previousWaveHead.isEmpty()) {
+                        TempBlock tempBlock = previousWaveHead.removeFirst();
+                        tempBlock.revertBlock();
+                    }
+
+                    // turn ground to lava and create new wave "head"
                     for (Block block : currentLayer) {
-                        TempBlock tempBlock = new TempBlock(block, Material.MAGMA_BLOCK);
+                        Block above = block.getRelative(BlockFace.UP);
+                        TempBlock tempBlock = new TempBlock(block, Material.LAVA);
+                        previousWaveHead.add(new TempBlock(above, Material.LAVA));
                     }
 
                     if (depth == wave.size()) {
@@ -116,7 +127,14 @@ public class LavaRush extends LavaAbility implements AddonAbility {
                     ArrayList<Block> currentLayer = wave.get(depth++);
                     for (Block block : currentLayer) {
                         TempBlock tempBlock = TempBlock.get(block);
-                        tempBlock.revertBlock();
+                        if (tempBlock != null) {
+                            tempBlock.revertBlock();
+                        }
+
+                        TempBlock above = TempBlock.get(block.getRelative(BlockFace.UP));
+                        if (above != null) {
+                            above.revertBlock();
+                        }
                     }
 
                     if (depth == wave.size()) {
