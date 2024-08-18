@@ -6,6 +6,7 @@ import com.projectkorra.projectkorra.ProjectKorra;
 import com.projectkorra.projectkorra.ability.AddonAbility;
 import com.projectkorra.projectkorra.ability.LavaAbility;
 import com.projectkorra.projectkorra.configuration.ConfigManager;
+import com.projectkorra.projectkorra.util.DamageHandler;
 import com.projectkorra.projectkorra.util.TempBlock;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -13,6 +14,7 @@ import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.Levelled;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.util.BlockIterator;
 import org.bukkit.util.Vector;
@@ -26,6 +28,7 @@ public class LavaRush extends LavaAbility implements AddonAbility {
     final static String DESCRIPTION = "An offensive Lavabending ability. To use, left-click in any direction. " +
             "A wave of lava will erupt from the ground, swallowing up anything in its way.";
     final static int MIN_LENGTH = 4;
+    final static int DAMAGE = 4;
 
     static ArrayList<LavaRush> instances = new ArrayList<>();
     static long cooldown = 10000;
@@ -132,6 +135,9 @@ public class LavaRush extends LavaAbility implements AddonAbility {
                         Block above = block.getRelative(BlockFace.UP);
                         TempBlock tempBlock = new TempBlock(block, Material.LAVA);
                         previousWaveHead.add(new TempBlock(above, Material.LAVA));
+                        for (Entity entity : GeneralMethods.getEntitiesAroundPoint(block.getLocation(), 1.0)) {
+                            DamageHandler.damageEntity(entity, DAMAGE, this);
+                        }
                     }
 
                     if (!currentLayer.isEmpty()) {
