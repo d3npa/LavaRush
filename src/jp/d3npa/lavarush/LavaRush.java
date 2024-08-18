@@ -5,7 +5,9 @@ import com.projectkorra.projectkorra.ProjectKorra;
 import com.projectkorra.projectkorra.ability.AddonAbility;
 import com.projectkorra.projectkorra.ability.LavaAbility;
 import com.projectkorra.projectkorra.configuration.ConfigManager;
+import com.projectkorra.projectkorra.util.TempBlock;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.util.Vector;
@@ -20,14 +22,20 @@ public class LavaRush extends LavaAbility implements AddonAbility {
             "A wave of lava will erupt from the ground, swallowing up anything in its way.";
 
     static ArrayList<LavaRush> instances = new ArrayList<>();
-    static long cooldown = 6000;
+    static long cooldown = 10000;
 
+    private Player player;
     private BendingPlayer bendingPlayer;
     private Location origin;
     private Vector direction;
     private int spam = 0;
-    private int interval = 1000;
+    private int interval = 100;
     private long lastProgress;
+    private LRState state;
+
+    /* Blocks are added in groups with their neighbors. Blocks within a group are animated at the same time. */
+    private ArrayList<ArrayList<Location>> wave = new ArrayList<>();
+    private int depth;
 
     public static void createConfig() {
         FileConfiguration languageConfig = ConfigManager.languageConfig.get();
@@ -48,17 +56,25 @@ public class LavaRush extends LavaAbility implements AddonAbility {
     public LavaRush(Player player) {
         super(player);
 
-        this.bendingPlayer = BendingPlayer.getBendingPlayer(player);
-        this.origin = player.getLocation();
-        this.direction = player
+        this.player = player;
+        bendingPlayer = BendingPlayer.getBendingPlayer(player);
+        direction = player
                 .getEyeLocation()
                 .getDirection()
                 .setY(0)
                 .normalize();
 
-//        LavaRush.instances.add(this);
-        bendingPlayer.addCooldown(NAME, cooldown);
-        this.lastProgress = System.currentTimeMillis();
+        ProjectKorra.log.info(String.format("Normalized Direction: %s", direction.toString()));
+
+        origin = player
+                .getLocation()
+                .add(new Vector(0, -1, 0)) // in the ground
+                .add(direction.clone().multiply(2)); // start 2 blocks in front of player
+
+        bendingPlayer.addCooldown(this);
+        lastProgress = System.currentTimeMillis();
+        calculateWave();
+        state = LRState.ANIMATING;
         player.sendMessage("New LavaRush Instance");
         this.start();
     }
@@ -70,12 +86,37 @@ public class LavaRush extends LavaAbility implements AddonAbility {
 
         if (timeSinceLastProgress > interval) {
             lastProgress = currentTime;
-            this.spam += 1;
-            this.bendingPlayer.getPlayer().sendMessage("Spam");
 
-            if (spam >= 3) {
-                this.bendingPlayer.getPlayer().sendMessage("Removing LavaRush");
-                this.remove();
+            /* LavaRush has 3 phases: casting, resting, cleanup. */
+            switch (state) {
+                case ANIMATING -> {
+                    ArrayList<Location> currentLayer = wave.get(depth++);
+                    for (Location loc : currentLayer) {
+                        TempBlock tempBlock = new TempBlock(loc.getBlock(), Material.MAGMA_BLOCK);
+                    }
+
+                    if (depth == wave.size()) {
+                        // reached end of wave
+                        depth = 0;
+                        state = LRState.RESTING;
+                    }
+                }
+                case RESTING -> {
+                    if (++spam == 30) {
+                        state = LRState.CLEANUP;
+                    }
+                }
+                case CLEANUP -> {
+                    ArrayList<Location> currentLayer = wave.get(depth++);
+                    for (Location loc : currentLayer) {
+                        TempBlock tempBlock = TempBlock.get(loc.getBlock());
+                        tempBlock.revertBlock();
+                    }
+
+                    if (depth == wave.size()) {
+                        this.remove();
+                    }
+                }
             }
         }
     }
@@ -92,7 +133,7 @@ public class LavaRush extends LavaAbility implements AddonAbility {
 
     @Override
     public long getCooldown() {
-        return 0;
+        return cooldown;
     }
 
     @Override
@@ -125,5 +166,25 @@ public class LavaRush extends LavaAbility implements AddonAbility {
     @Override
     public String getVersion() {
         return VERSION;
+    }
+
+    public void calculateWave() {
+        /* use player position to precalculate a list of all blocks transformed by the wave */
+        final int range = 8;
+        depth = 0;
+
+        ProjectKorra.log.info(String.format("Origin: %s", origin.toString()));
+        ProjectKorra.log.info(String.format("Direction: %s", direction.toString()));
+
+        for (int i = 0; i < range; i++) {
+            // get the next blocks in the wave
+
+            Vector modifiedDirection = direction.clone().multiply(i);
+            Location middle = origin.clone().add(modifiedDirection);
+            ArrayList<Location> layer = new ArrayList<>();
+            layer.add(middle);
+            wave.add(layer);
+        }
+
     }
 }
