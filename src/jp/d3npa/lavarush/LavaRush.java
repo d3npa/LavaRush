@@ -13,6 +13,7 @@ import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
+import org.bukkit.util.BlockIterator;
 import org.bukkit.util.Vector;
 
 import java.util.ArrayList;
@@ -28,19 +29,19 @@ public class LavaRush extends LavaAbility implements AddonAbility {
     static long cooldown = 10000;
     static int range = 10;
 
-    private Player player;
     private BendingPlayer bendingPlayer;
     private Location origin;
-    private Location target;
     private Vector direction;
     private int spam = 0;
-    private int interval = 50;
+    private int interval = 20;
     private long lastProgress;
     private LRState state;
 
     /* Blocks are added in groups with their neighbors. Blocks within a group are animated at the same time. */
     private ArrayList<ArrayList<Block>> wave = new ArrayList<>();
     private int depth;
+
+    private BlockIterator line;
 
     public static void createConfig() {
         FileConfiguration languageConfig = ConfigManager.languageConfig.get();
@@ -61,7 +62,6 @@ public class LavaRush extends LavaAbility implements AddonAbility {
     public LavaRush(Player player) {
         super(player);
 
-        this.player = player;
         bendingPlayer = BendingPlayer.getBendingPlayer(player);
         direction = player
                 .getEyeLocation()
@@ -74,13 +74,15 @@ public class LavaRush extends LavaAbility implements AddonAbility {
                 .add(new Vector(0, -1, 0)) // in the ground
                 .add(direction.clone().multiply(3)); // start 3 blocks in front of player
 
-        target = origin.clone().add(direction.clone().multiply(range * range));
-        bendingPlayer.addCooldown(this);
         lastProgress = System.currentTimeMillis();
+        line = new BlockIterator(origin.getWorld(), origin.toVector(), direction, 0, range);
         calculateWave();
-        state = LRState.ANIMATING;
-        player.sendMessage("New LavaRush Instance");
-        this.start();
+
+        if (!wave.isEmpty()) {
+            state = LRState.ANIMATING;
+            bendingPlayer.addCooldown(this);
+            this.start();
+        }
     }
 
     @Override
@@ -173,54 +175,26 @@ public class LavaRush extends LavaAbility implements AddonAbility {
     }
 
     public void calculateWave() {
-        /* use player position to precalculate a list of all blocks transformed by the wave */
-        depth = 0;
+        /* precalculate a list of all blocks transformed by the wave */
+        while (line.hasNext()) {
+            BlockFace directionAsBlockFace = GeneralMethods.getCardinalDirection(direction);
 
-        ProjectKorra.log.info(String.format("Origin: %s", origin.toString()));
-        ProjectKorra.log.info(String.format("Direction: %s", direction.toString()));
+            Block middle = line.next();
+            Block left = middle.getRelative(getLeftBlockFace(directionAsBlockFace));
+            Block right = middle.getRelative(getLeftBlockFace(directionAsBlockFace).getOppositeFace());
 
-        for (int i = 0; i < range; i++) {
-            if (wave.isEmpty()) {
-                /* add origin to the wave */
-                BlockFace directionAsBlockFace = GeneralMethods.getCardinalDirection(direction);
-
-                Block middle = origin.getBlock();
-                Block left = middle.getRelative(getLeftBlockFace(directionAsBlockFace), 1);
-                Block right = middle.getRelative(getLeftBlockFace(directionAsBlockFace).getOppositeFace(), 1);
-
-                ArrayList<Block> layer = new ArrayList<>();
-                for (Block block : new Block[]{left, middle, right}) {
-                    if (canLavabend(block)) {
-                        layer.add(block);
-                    }
+            ArrayList<Block> layer = new ArrayList<>();
+            for (Block block : new Block[] { left, middle, right }) {
+                if (canLavabend(block)) {
+                    layer.add(block);
                 }
-
-                if (layer.isEmpty()) {
-                    return;
-                }
-
-                wave.add(layer);
-            } else {
-                /* get last layer and use that to calculate next layer */
-                ArrayList<Block> lastLayer = wave.getLast();
-                ArrayList<Block> nextLayer = new ArrayList<>();
-
-                for (Block prevBlock : lastLayer) {
-                    /* determine direction by drawing a line from block to target */
-                    Vector direction = GeneralMethods.getDirection(prevBlock.getLocation(), target);
-                    BlockFace cardinalDirection = GeneralMethods.getCardinalDirection(direction);
-                    Block nextBlock = prevBlock.getRelative(cardinalDirection, 1);
-                    if (canLavabend(nextBlock)) {
-                        nextLayer.add(nextBlock);
-                    }
-                }
-
-                if (nextLayer.isEmpty()) {
-                    return;
-                }
-
-                wave.add(nextLayer);
             }
+
+            if (layer.isEmpty()) {
+                return;
+            }
+
+            wave.add(layer);
         }
     }
 
