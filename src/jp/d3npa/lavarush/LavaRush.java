@@ -11,6 +11,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.block.data.Levelled;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.util.BlockIterator;
@@ -97,25 +98,29 @@ public class LavaRush extends LavaAbility implements AddonAbility {
             /* LavaRush has 3 phases: casting, resting, cleanup. */
             switch (state) {
                 case ANIMATING -> {
-                    ArrayList<Block> currentLayer = wave.get(depth++);
-
                     // replace previous wave "head" with air
                     while (!previousWaveHead.isEmpty()) {
                         TempBlock tempBlock = previousWaveHead.removeFirst();
-                        tempBlock.revertBlock();
-                    }
-
-                    // turn ground to lava and create new wave "head"
-                    for (Block block : currentLayer) {
-                        Block above = block.getRelative(BlockFace.UP);
-                        TempBlock tempBlock = new TempBlock(block, Material.LAVA);
-                        previousWaveHead.add(new TempBlock(above, Material.LAVA));
+                        // set to low lava
+                        Levelled lavaData = (Levelled) tempBlock.getBlockData();
+                        lavaData.setLevel(1); // range is 0 (very low) to 15 (full)
+                        tempBlock.setType(lavaData);
                     }
 
                     if (depth == wave.size()) {
                         // reached end of wave
                         depth = 0;
                         state = LRState.RESTING;
+                        break;
+                    }
+
+                    // turn ground to lava and create new wave "head"
+                    ArrayList<Block> currentLayer = wave.get(depth++);
+
+                    for (Block block : currentLayer) {
+                        Block above = block.getRelative(BlockFace.UP);
+                        TempBlock tempBlock = new TempBlock(block, Material.LAVA);
+                        previousWaveHead.add(new TempBlock(above, Material.LAVA));
                     }
                 }
                 case RESTING -> {
