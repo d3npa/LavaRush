@@ -20,6 +20,7 @@ import org.bukkit.util.BlockIterator;
 import org.bukkit.util.Vector;
 
 import java.util.ArrayList;
+import java.util.Objects;
 
 public class LavaRush extends LavaAbility implements AddonAbility {
     final static String NAME = "LavaRush";
@@ -27,20 +28,19 @@ public class LavaRush extends LavaAbility implements AddonAbility {
     final static String AUTHOR = "d3npa";
     final static String DESCRIPTION = "An offensive Lavabending ability. To use, left-click in any direction. " +
             "A wave of lava will erupt from the ground, swallowing up anything in its way.";
-    final static int MIN_LENGTH = 4;
+
+    final static int PROGRESS_INTERVAL = 20;
+    final static int RESTING_DURATION = 4000;
+    final static int COOLDOWN = 10000;
     final static int DAMAGE = 4;
+    final static int MIN_LENGTH = 4;
+    final static int RANGE = 10;
 
-    static ArrayList<LavaRush> instances = new ArrayList<>();
-    static long cooldown = 10000;
-    static int range = 10;
-
-    private BendingPlayer bendingPlayer;
+    private LRState state;
     private Location origin;
     private Vector direction;
-    private int spam = 0;
-    private int interval = 20;
     private long lastProgress;
-    private LRState state;
+    private long startedResting;
 
     /* Blocks are added in groups with their neighbors. Blocks within a group are animated at the same time. */
     private ArrayList<ArrayList<Block>> wave = new ArrayList<>();
@@ -68,7 +68,6 @@ public class LavaRush extends LavaAbility implements AddonAbility {
     public LavaRush(Player player) {
         super(player);
 
-        bendingPlayer = BendingPlayer.getBendingPlayer(player);
         direction = player
                 .getEyeLocation()
                 .getDirection()
@@ -90,12 +89,19 @@ public class LavaRush extends LavaAbility implements AddonAbility {
             }
         }
 
-        lastProgress = System.currentTimeMillis();
-        line = new BlockIterator(origin.getWorld(), origin.toVector(), direction, 0, range);
+        line = new BlockIterator(
+                Objects.requireNonNull(origin.getWorld()),
+                origin.toVector(),
+                direction,
+                0,
+                RANGE);
+
         calculateWave();
 
         if (wave.size() >= MIN_LENGTH) {
             state = LRState.ANIMATING;
+            lastProgress = System.currentTimeMillis();
+            BendingPlayer bendingPlayer = BendingPlayer.getBendingPlayer(player);
             bendingPlayer.addCooldown(this);
             this.start();
         }
@@ -106,7 +112,7 @@ public class LavaRush extends LavaAbility implements AddonAbility {
         long currentTime = System.currentTimeMillis();
         long timeSinceLastProgress = currentTime - lastProgress;
 
-        if (timeSinceLastProgress > interval) {
+        if (timeSinceLastProgress > PROGRESS_INTERVAL) {
             lastProgress = currentTime;
 
             /* LavaRush has 3 phases: casting, resting, cleanup. */
@@ -125,6 +131,7 @@ public class LavaRush extends LavaAbility implements AddonAbility {
                         // reached end of wave
                         depth = 0;
                         state = LRState.RESTING;
+                        startedResting = System.currentTimeMillis();
                         break;
                     }
 
@@ -145,7 +152,7 @@ public class LavaRush extends LavaAbility implements AddonAbility {
                     }
                 }
                 case RESTING -> {
-                    if (++spam == 60) {
+                    if (currentTime > startedResting + RESTING_DURATION) {
                         state = LRState.CLEANUP;
                     }
                 }
@@ -183,7 +190,7 @@ public class LavaRush extends LavaAbility implements AddonAbility {
 
     @Override
     public long getCooldown() {
-        return cooldown;
+        return COOLDOWN;
     }
 
     @Override
@@ -193,7 +200,7 @@ public class LavaRush extends LavaAbility implements AddonAbility {
 
     @Override
     public Location getLocation() {
-        return null;
+        return origin;
     }
 
     @Override
