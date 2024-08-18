@@ -26,10 +26,12 @@ public class LavaRush extends LavaAbility implements AddonAbility {
 
     static ArrayList<LavaRush> instances = new ArrayList<>();
     static long cooldown = 10000;
+    static int range = 10;
 
     private Player player;
     private BendingPlayer bendingPlayer;
     private Location origin;
+    private Location target;
     private Vector direction;
     private int spam = 0;
     private int interval = 50;
@@ -67,13 +69,12 @@ public class LavaRush extends LavaAbility implements AddonAbility {
                 .setY(0)
                 .normalize();
 
-        ProjectKorra.log.info(String.format("Normalized Direction: %s", direction.toString()));
-
         origin = player
                 .getLocation()
                 .add(new Vector(0, -1, 0)) // in the ground
                 .add(direction.clone().multiply(3)); // start 3 blocks in front of player
 
+        target = origin.clone().add(direction.clone().multiply(range * range));
         bendingPlayer.addCooldown(this);
         lastProgress = System.currentTimeMillis();
         calculateWave();
@@ -173,54 +174,53 @@ public class LavaRush extends LavaAbility implements AddonAbility {
 
     public void calculateWave() {
         /* use player position to precalculate a list of all blocks transformed by the wave */
-        final int range = 10;
         depth = 0;
 
         ProjectKorra.log.info(String.format("Origin: %s", origin.toString()));
         ProjectKorra.log.info(String.format("Direction: %s", direction.toString()));
 
         for (int i = 0; i < range; i++) {
-            // get the next blocks in the wave
-            Vector modifiedDirection = direction.clone().multiply(i);
-            Location middleLocation = origin.clone().add(modifiedDirection);
-            Block middle = middleLocation.getBlock();
-            BlockFace directionAsBlockFace = GeneralMethods.getCardinalDirection(direction);
-            Block left = middle.getRelative(getLeftBlockFace(directionAsBlockFace));
-            Block right = middle.getRelative(getLeftBlockFace(directionAsBlockFace).getOppositeFace());
+            if (wave.isEmpty()) {
+                /* add origin to the wave */
+                BlockFace directionAsBlockFace = GeneralMethods.getCardinalDirection(direction);
 
-            ArrayList<Block> layer = new ArrayList<>();
+                Block middle = origin.getBlock();
+                Block left = middle.getRelative(getLeftBlockFace(directionAsBlockFace), 1);
+                Block right = middle.getRelative(getLeftBlockFace(directionAsBlockFace).getOppositeFace(), 1);
 
-            for (Block block : new Block[] { left, middle, right }) {
-
-                /* some checks must be made on the block before adding
-                 *  - is there space above?
-                 *  - if it is air, is there earth below it? (slight slope)
-                 *  - is it earthbendable?
-                 */
-                if (GeneralMethods.isTransparent(block)) {
-                    /* when air or water, torch etc, use the block beneath and perform more checks */
-                    block = block.getRelative(BlockFace.DOWN);
+                ArrayList<Block> layer = new ArrayList<>();
+                for (Block block : new Block[]{left, middle, right}) {
+                    if (canLavabend(block)) {
+                        layer.add(block);
+                    }
                 }
 
-                Block above = block.getRelative(BlockFace.UP);
-                if (!GeneralMethods.isTransparent(above)) {
-                    // don't worry about going up slopes for now.
-                    break;
+                if (layer.isEmpty()) {
+                    return;
                 }
 
-                if (!isEarthbendable(block)) {
-                    break;
+                wave.add(layer);
+            } else {
+                /* get last layer and use that to calculate next layer */
+                ArrayList<Block> lastLayer = wave.getLast();
+                ArrayList<Block> nextLayer = new ArrayList<>();
+
+                for (Block prevBlock : lastLayer) {
+                    /* determine direction by drawing a line from block to target */
+                    Vector direction = GeneralMethods.getDirection(prevBlock.getLocation(), target);
+                    BlockFace cardinalDirection = GeneralMethods.getCardinalDirection(direction);
+                    Block nextBlock = prevBlock.getRelative(cardinalDirection, 1);
+                    if (canLavabend(nextBlock)) {
+                        nextLayer.add(nextBlock);
+                    }
                 }
 
-                layer.add(block);
+                if (nextLayer.isEmpty()) {
+                    return;
+                }
+
+                wave.add(nextLayer);
             }
-
-            if (layer.isEmpty()) {
-                // no blocks could be bent, so stop the wave here.
-                return;
-            }
-
-            wave.add(layer);
         }
     }
 
@@ -238,5 +238,29 @@ public class LavaRush extends LavaAbility implements AddonAbility {
             case SOUTH_EAST -> BlockFace.NORTH_EAST;
             default -> null;
         };
+    }
+
+    public boolean canLavabend(Block block) {
+        /* some checks must be made on the block before adding
+         *  - is there space above?
+         *  - if it is air, is there earth below it? (slight slope)
+         *  - is it earthbendable?
+         */
+        if (GeneralMethods.isTransparent(block)) {
+            /* when air or water, torch etc, use the block beneath and perform more checks */
+            block = block.getRelative(BlockFace.DOWN);
+        }
+
+        Block above = block.getRelative(BlockFace.UP);
+        if (!GeneralMethods.isTransparent(above)) {
+            // don't worry about going up slopes for now.
+            return false;
+        }
+
+        if (!isEarthbendable(block)) {
+            return false;
+        }
+
+        return true;
     }
 }
