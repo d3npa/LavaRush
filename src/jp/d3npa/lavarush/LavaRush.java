@@ -185,7 +185,8 @@ public class LavaRush extends LavaAbility implements AddonAbility {
 
             ArrayList<Block> layer = new ArrayList<>();
             for (Block block : new Block[] { left, middle, right }) {
-                if (canLavabend(block)) {
+                block = getLavabendableBlock(block);
+                if (block != null) {
                     layer.add(block);
                 }
             }
@@ -214,10 +215,11 @@ public class LavaRush extends LavaAbility implements AddonAbility {
         };
     }
 
-    public boolean canLavabend(Block block) {
+    public Block getLavabendableBlock(Block block) {
         /* some checks must be made on the block before adding
          *  - is there space above?
          *  - if it is air, is there earth below it? (slight slope)
+         *  - if the block above is not air, does that one have air above and is earthbendable?
          *  - is it earthbendable?
          */
         if (GeneralMethods.isTransparent(block)) {
@@ -227,14 +229,18 @@ public class LavaRush extends LavaAbility implements AddonAbility {
 
         Block above = block.getRelative(BlockFace.UP);
         if (!GeneralMethods.isTransparent(above)) {
-            // don't worry about going up slopes for now.
-            return false;
+            Block aboveTwice = above.getRelative(BlockFace.UP);
+            if (GeneralMethods.isTransparent(aboveTwice)) {
+                block = above;
+            } else {
+                return null;
+            }
         }
 
         if (!isEarthbendable(block)) {
-            return false;
+            return null;
         }
 
-        return true;
+        return block;
     }
 }
