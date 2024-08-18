@@ -133,6 +133,10 @@ public class LavaRush extends LavaAbility implements AddonAbility {
                         TempBlock tempBlock = new TempBlock(block, Material.LAVA);
                         previousWaveHead.add(new TempBlock(above, Material.LAVA));
                     }
+
+                    if (!currentLayer.isEmpty()) {
+                        playEarthbendingSound(currentLayer.getFirst().getLocation());
+                    }
                 }
                 case RESTING -> {
                     if (++spam == 60) {
@@ -163,7 +167,7 @@ public class LavaRush extends LavaAbility implements AddonAbility {
 
     @Override
     public boolean isSneakAbility() {
-        return true;
+        return false;
     }
 
     @Override
@@ -195,7 +199,6 @@ public class LavaRush extends LavaAbility implements AddonAbility {
 
     @Override
     public void stop() {
-        // TODO: cleanup all instances
     }
 
     @Override
