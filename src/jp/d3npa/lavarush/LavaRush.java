@@ -36,6 +36,7 @@ public class LavaRush extends LavaAbility implements AddonAbility {
     final static int MIN_LENGTH = 4;
     final static int RANGE = 10;
 
+    private Player player;
     private LRState state;
     private Location origin;
     private Vector direction;
@@ -67,6 +68,8 @@ public class LavaRush extends LavaAbility implements AddonAbility {
 
     public LavaRush(Player player) {
         super(player);
+
+        this.player = player;
 
         direction = player
                 .getEyeLocation()
@@ -176,6 +179,11 @@ public class LavaRush extends LavaAbility implements AddonAbility {
                 }
             }
         }
+    }
+
+    @Override
+    public Player getPlayer() {
+        return this.player;
     }
 
     @Override
